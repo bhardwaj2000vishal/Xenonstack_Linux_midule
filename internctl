@@ -1,0 +1,167 @@
+#!/bin/bash
+
+VERSION="v0.1.0"
+
+show_help() {
+    echo "Usage: internctl [options]"
+    echo "Options:"
+    echo "  --help       Show this help message"
+    echo "  --version    Show the version"
+    echo "  cpu          CPU-related commands"
+    echo "  memory       Memory-related commands"
+    echo "  user         User-related commands"
+    echo "  file         File-related commands"
+    # Add more options and descriptions as needed
+}
+
+cpu_getinfo() {
+    lscpu
+}
+
+memory_getinfo() {
+    free
+}
+
+user_create() {
+    if [ "$#" -ne 1 ]; then
+        echo "Usage: internctl user create <username>" >&2
+        exit 1
+    fi
+
+    username=$1
+
+    # Check if the user already exists
+    if id "$username" &>/dev/null; then
+        echo "User '$username' already exists." >&2
+        exit 1
+    fi
+
+    # Create the user without a password prompt
+    echo "Creating user '$username'..."
+    sudo useradd -m -p '' "$username"
+
+    echo "User '$username' created successfully."
+}
+
+file_getinfo() {
+    local size_option=false
+    local permissions_option=false
+    local owner_option=false
+    local last_modified_option=false
+
+    while [[ "$#" -gt 0 ]]; do
+        case "$1" in
+            --size | -s)
+                size_option=true
+                ;;
+            --permissions | -p)
+                permissions_option=true
+                ;;
+            --owner | -o)
+                owner_option=true
+                ;;
+            --last-modified | -m)
+                last_modified_option=true
+                ;;
+            *)
+                filename=$1
+                ;;
+        esac
+        shift
+    done
+
+    if [ -z "$filename" ]; then
+        echo "Usage: internctl file getinfo [options] <file-name>" >&2
+        exit 1
+    fi
+
+    if [ ! -e "$filename" ]; then
+        echo "File '$filename' does not exist." >&2
+        exit 1
+    fi
+
+    # Use stat to get file information
+    file_info=$(stat --format="File: %n\nAccess: %A\nSize(B): %s\nOwner: %U\nModify: %y" "$filename")
+
+    # Print specific information based on options
+    if $size_option; then
+        echo "Size: $(stat --format="%s" "$filename")"
+    fi
+
+    if $permissions_option; then
+        echo "Permissions: $(stat --format="%A" "$filename")"
+    fi
+
+    if $owner_option; then
+        echo "Owner: $(stat --format="%U" "$filename")"
+    fi
+
+    if $last_modified_option; then
+        echo "Last Modified: $(stat --format="%y" "$filename")"
+    fi
+
+    # Print default information if no options are specified
+    if [ "$#" -eq 0 ]; then
+        echo -e "$file_info"
+    fi
+}
+
+if [ "$#" -eq 0 ]; then
+    echo "Hello, this is your internctl command!"
+    exit 0
+fi
+
+case "$1" in
+    --help)
+        show_help
+        ;;
+    --version)
+        echo "internctl version $VERSION"
+        ;;
+    cpu)
+        if [ "$2" == "getinfo" ]; then
+            cpu_getinfo
+        else
+            echo "Invalid subcommand for cpu: $2" >&2
+            exit 1
+        fi
+        ;;
+    memory)
+        if [ "$2" == "getinfo" ]; then
+            memory_getinfo
+        else
+            echo "Invalid subcommand for memory: $2" >&2
+            exit 1
+        fi
+        ;;
+    user)
+        shift
+        case "$1" in
+            create)
+                shift
+                user_create "$@"
+                ;;
+            *)
+                echo "Invalid subcommand for user: $1" >&2
+                exit 1
+                ;;
+        esac
+        ;;
+    file)
+        shift
+        case "$1" in
+            getinfo)
+                shift
+                file_getinfo "$@"
+                ;;
+            *)
+                echo "Invalid subcommand for file: $1" >&2
+                exit 1
+                ;;
+        esac
+        ;;
+    *)
+        echo "Invalid option: $1" >&2
+        exit 1
+        ;;
+esac
